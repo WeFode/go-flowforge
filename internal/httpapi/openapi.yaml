@@ -1,0 +1,277 @@
+openapi: 3.1.0
+info:
+  title: FlowForge API
+  version: 0.1.0
+  description: Durable workflow execution for applications and AI agents. All execution is asynchronous. Poll runs or consume events using a cursor.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /system:
+    get:
+      operationId: getSystem
+      responses:
+        '200': { description: Engine version, workers, handlers and queue backend }
+  /stats:
+    get:
+      operationId: getExecutionStats
+      responses:
+        '200': { description: Execution counts grouped by status }
+  /workflows:
+    get:
+      operationId: listWorkflows
+      responses:
+        '200':
+          description: Up to 1000 definitions, newest update first
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Workflow' } }
+    post:
+      operationId: createWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Workflow' }
+      responses:
+        '201': { description: Created definition including version }
+        '409': { description: ID already exists }
+        '422': { description: Invalid definition or cyclic dependencies }
+  /workflows/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getWorkflow
+      responses:
+        '200':
+          description: Current definition
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workflow' }
+        '404': { description: Unknown workflow }
+    put:
+      operationId: updateWorkflow
+      description: Send the version last read. A concurrent edit returns 409. Existing runs keep their original snapshot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Workflow' }
+      responses:
+        '200': { description: Saved definition with incremented version }
+        '409': { description: Version conflict }
+        '422': { description: Invalid definition }
+    delete:
+      operationId: deleteUnusedWorkflow
+      description: Only definitions with no execution history can be deleted. Disable an existing definition to preserve history.
+      responses:
+        '200': { description: Deleted }
+        '409': { description: Definition has execution history }
+  /workflows/{id}/runs:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      operationId: enqueueWorkflow
+      description: Returns immediately. Use a stable business key to prevent duplicate enqueue requests. Keys are scoped to the workflow and retained for the lifetime of the run.
+      parameters:
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Enqueue' }
+      responses:
+        '202':
+          description: Queued instance, or original instance for a duplicate key
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Run' }
+        '409': { description: Workflow is disabled }
+  /hooks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      operationId: triggerWebhook
+      description: Authenticated webhook adapter. Wrap third-party payloads under input. Equivalent to enqueueWorkflow with source webhook.
+      parameters:
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Enqueue' }
+      responses:
+        '202': { description: Queued instance }
+  /runs:
+    get:
+      operationId: listRuns
+      parameters:
+        - { name: workflow_id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [queued, running, waiting, succeeded, failed, cancelled] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Newest executions first
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Run' } }
+  /runs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getRun
+      responses:
+        '200':
+          description: Snapshot, step states, outputs and errors
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Run' }
+        '404': { description: Unknown execution }
+  /runs/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getRunEvents
+      parameters:
+        - { name: after, in: query, schema: { type: integer, format: int64, default: 0 } }
+      responses:
+        '200': { description: Up to 1000 events in ascending ID order. Pass the last event ID as after for the next page. }
+  /runs/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      operationId: cancelRun
+      description: Invalidates execution ownership and pending callbacks. External side effects already accepted cannot be rolled back.
+      responses:
+        '200': { description: Cancelled }
+        '409': { description: Execution is already terminal }
+  /runs/{id}/replay:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      operationId: replayRun
+      description: Create a fresh run with the terminal run's original definition and input. Replays do not use the latest workflow definition.
+      parameters:
+        - $ref: '#/components/parameters/idempotencyKey'
+      responses:
+        '202': { description: New execution instance }
+        '409': { description: Original execution is still active }
+  /callbacks/{token}:
+    post:
+      operationId: completeAsyncStep
+      security: []
+      description: Use the per-attempt capability URL supplied in X-FlowForge-Callback-URL. It expires at the step deadline. Duplicate delivery of the same terminal status is acknowledged without overwriting output.
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status: { type: string, enum: [succeeded, failed] }
+                output: {}
+                error: { type: string, maxLength: 2000 }
+      responses:
+        '200': { description: Accepted or duplicate same-status delivery }
+        '404': { description: Invalid or expired capability }
+        '409': { description: Stale attempt, cancelled run or conflicting delivery }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string } }
+    idempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 200 } }
+  schemas:
+    Enqueue:
+      type: object
+      additionalProperties: false
+      properties:
+        input: { type: object, additionalProperties: true }
+        priority: { type: integer, minimum: -100, maximum: 100, default: 0 }
+        scheduled_at: { type: string, format: date-time, description: Optional RFC3339 time. Leave empty to queue immediately. }
+    Workflow:
+      type: object
+      required: [id, name, steps]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$' }
+        name: { type: string, maxLength: 200 }
+        description: { type: string }
+        input_example: { type: object, additionalProperties: true, description: Default input shown in the console run dialog }
+        enabled: { type: boolean, default: false }
+        version: { type: integer, description: Required for optimistic concurrency on update }
+        concurrency: { type: integer, minimum: 1, maximum: 64, default: 4 }
+        max_active_runs: { type: integer, minimum: 1, maximum: 10000, default: 16 }
+        timeout_seconds: { type: integer, minimum: 1, maximum: 2592000, default: 86400 }
+        window:
+          type: object
+          required: [start, end, timezone]
+          properties:
+            start: { type: string, example: '20:00' }
+            end: { type: string, example: '08:00' }
+            timezone: { type: string, example: Asia/Shanghai }
+            days: { type: array, items: { type: integer, minimum: 0, maximum: 6 } }
+        schedule:
+          type: object
+          required: [cron, timezone]
+          properties:
+            cron: { type: string, example: '0 9 * * 1-5' }
+            timezone: { type: string, example: Asia/Shanghai }
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 128
+          items: { $ref: '#/components/schemas/Step' }
+    Step:
+      type: object
+      required: [id, type]
+      additionalProperties: false
+      properties:
+        id: { type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$' }
+        name: { type: string }
+        type: { type: string, enum: [http, transform, delay, callback] }
+        execution_mode: { type: string, enum: [sync, async], description: 'HTTP supports sync or async. transform is sync; delay is async and managed by the engine. Legacy callback type implies async.' }
+        depends_on: { type: array, items: { type: string } }
+        timeout_seconds: { type: integer, minimum: 1, maximum: 604800, default: 60 }
+        retry:
+          type: object
+          properties:
+            max_attempts: { type: integer, minimum: 1, maximum: 20, default: 1 }
+            initial_seconds: { type: integer, minimum: 1, default: 2 }
+            max_seconds: { type: integer, minimum: 1, maximum: 86400, default: 300 }
+        on_error: { type: string, enum: [stop, continue, skip_dependents], default: stop }
+        affects_run: { type: boolean, default: true }
+        join: { type: string, enum: [all_success, all_done, any_success], default: all_success }
+        condition:
+          type: object
+          required: [path, op]
+          properties:
+            path: { type: string, example: input.enabled }
+            op: { type: string, enum: [eq, ne, exists] }
+            value: {}
+        config:
+          type: object
+          additionalProperties: true
+          description: 'http/callback: url, method, headers, body; transform: value; delay: seconds. Strings support {{input.path}}, {{steps.ID.output.path}}, {{run.id}}. HTTP headers/body may reference {{secrets.NAME}}.'
+    Run:
+      type: object
+      properties:
+        id: { type: string }
+        workflow_id: { type: string }
+        definition: { $ref: '#/components/schemas/Workflow' }
+        input: { type: object, additionalProperties: true }
+        status: { type: string, enum: [queued, running, waiting, succeeded, failed, cancelled] }
+        source: { type: string }
+        priority: { type: integer }
+        steps: { type: object, additionalProperties: { type: object, additionalProperties: true } }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        next_at: { type: string, format: date-time }

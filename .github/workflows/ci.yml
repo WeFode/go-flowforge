@@ -1,0 +1,40 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: flowforge
+          POSTGRES_USER: flowforge
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U flowforge -d flowforge"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      GOWORK: 'off'
+      FLOWFORGE_TEST_DATABASE_URL: postgres://flowforge@localhost:5432/flowforge?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: go test -race -count=1 ./...
+      - run: go vet ./...
+      - run: node --test scripts/release.test.mjs
+      - run: node scripts/release.mjs check
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web

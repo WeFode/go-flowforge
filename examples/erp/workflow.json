@@ -1,0 +1,53 @@
+{
+  "id": "factory-erp",
+  "name": "工厂 ERP · 订单到排产",
+  "description": "库存、质检和产能智能体并行，采购与产能异步上报，汇合排产后回写 ERP。使用本地模拟服务，可替换为真实智能体。",
+  "enabled": true,
+  "concurrency": 4,
+  "max_active_runs": 8,
+  "timeout_seconds": 180,
+  "input_example": {
+    "order_id": "SO-2026-1042",
+    "customer": "华东精密设备有限公司",
+    "sku": "SERVO-MOTOR-A1",
+    "quantity": 1200,
+    "warehouse": "华东成品仓",
+    "due_date": "2026-11-05",
+    "scenario": { "inventory_retry": true, "quality_reject": false, "notification_failure": false }
+  },
+  "steps": [
+    { "id": "order", "name": "接收 ERP 订单", "type": "transform", "execution_mode": "sync", "depends_on": [], "config": { "value": "{{input}}" } },
+    {
+      "id": "inventory", "name": "库存分析智能体", "type": "http", "execution_mode": "sync", "depends_on": ["order"],
+      "timeout_seconds": 10, "retry": { "max_attempts": 3, "initial_seconds": 1, "max_seconds": 4 },
+      "config": { "url": "http://erp-agents:8090/agents/inventory", "method": "POST", "body": { "order": "{{steps.order.output}}" } }
+    },
+    {
+      "id": "quality", "name": "质检规则智能体", "type": "http", "execution_mode": "sync", "depends_on": ["order"], "timeout_seconds": 10,
+      "config": { "url": "http://erp-agents:8090/agents/quality", "method": "POST", "body": { "order": "{{steps.order.output}}" } }
+    },
+    {
+      "id": "capacity", "name": "产能评估智能体", "type": "http", "execution_mode": "async", "depends_on": ["order"], "timeout_seconds": 60,
+      "retry": { "max_attempts": 2, "initial_seconds": 2, "max_seconds": 8 },
+      "config": { "url": "http://erp-agents:8090/agents/capacity", "method": "POST", "body": { "order": "{{steps.order.output}}" } }
+    },
+    {
+      "id": "procurement", "name": "采购建议智能体", "type": "http", "execution_mode": "async", "depends_on": ["inventory"], "timeout_seconds": 60,
+      "retry": { "max_attempts": 2, "initial_seconds": 2, "max_seconds": 8 },
+      "config": { "url": "http://erp-agents:8090/agents/procurement", "method": "POST", "body": { "order": "{{steps.order.output}}", "inventory": "{{steps.inventory.output.body}}" } }
+    },
+    {
+      "id": "plan", "name": "汇合生成排产单", "type": "http", "execution_mode": "sync", "depends_on": ["inventory", "quality", "capacity", "procurement"], "timeout_seconds": 10,
+      "config": { "url": "http://erp-agents:8090/agents/plan", "method": "POST", "body": { "order": "{{steps.order.output}}", "inventory": "{{steps.inventory.output.body}}", "quality": "{{steps.quality.output.body}}", "capacity": "{{steps.capacity.output}}", "procurement": "{{steps.procurement.output}}" } }
+    },
+    {
+      "id": "erp_writeback", "name": "回写 ERP 工单", "type": "http", "execution_mode": "sync", "depends_on": ["plan"], "timeout_seconds": 10,
+      "config": { "url": "http://erp-agents:8090/agents/erp", "method": "POST", "body": { "order": "{{steps.order.output}}", "plan": "{{steps.plan.output.body}}" } }
+    },
+    {
+      "id": "notify", "name": "异步通知生产主管", "type": "http", "execution_mode": "async", "depends_on": ["erp_writeback"], "timeout_seconds": 30,
+      "on_error": "continue", "affects_run": false,
+      "config": { "url": "http://erp-agents:8090/agents/notify", "method": "POST", "body": { "order": "{{steps.order.output}}", "erp": "{{steps.erp_writeback.output.body}}" } }
+    }
+  ]
+}

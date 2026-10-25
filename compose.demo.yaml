@@ -1,0 +1,26 @@
+services:
+  app:
+    environment:
+      FLOWFORGE_DEMO: "true"
+      FLOWFORGE_DEMO_AGENT_URL: http://erp-agents:8090
+      FLOWFORGE_PUBLIC_URL: http://app:8088
+      FLOWFORGE_HTTP_ALLOW_PRIVATE: "true"
+      FLOWFORGE_HTTP_ALLOWED_HOSTS: erp-agents
+    depends_on:
+      erp-agents: { condition: service_healthy }
+  erp-agents:
+    build:
+      context: .
+      target: erp-demo
+    environment:
+      FLOWFORGE_REPORT_ORIGIN: http://app:8088
+    ports: ["127.0.0.1:${DEMO_AGENT_PORT:-8090}:8090"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/healthz"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped

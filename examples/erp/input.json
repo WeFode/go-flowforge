@@ -1,0 +1,9 @@
+{
+  "order_id": "SO-2026-1042",
+  "customer": "华东精密设备有限公司",
+  "sku": "SERVO-MOTOR-A1",
+  "quantity": 1200,
+  "warehouse": "华东成品仓",
+  "due_date": "2026-11-05",
+  "scenario": { "inventory_retry": true, "quality_reject": false, "notification_failure": false }
+}

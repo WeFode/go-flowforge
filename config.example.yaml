@@ -1,0 +1,15 @@
+listen: ":8088"
+database_url: "postgres://flowforge:flowforge@localhost:55432/flowforge?sslmode=disable"
+# Copy this file to config.local.yaml and set your own token (24+ characters).
+api_token: ""
+public_url: "http://localhost:8088"
+workers: 8
+poll_ms: 500
+lease_seconds: 30
+db_connections: 24
+http_allow_private: false
+http_allowed_hosts: []
+redis_url: "" # Reserved; PostgreSQL is the durable queue in this version.
+demo: false
+demo_agent_url: "http://erp-agents:8090"
+web_dir: "web/dist"

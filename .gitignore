@@ -1,0 +1,44 @@
+# Credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+config.local.*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Dependencies, builds and runtime data
+node_modules/
+dist/
+bin/
+coverage.out
+*.exe
+*.test
+*.log
+*.dump
+*.backup
+*.tar.gz
+*.zip
+data/
+volumes/
+tmp/
+.cache/
+test-results/
+playwright-report/
+
+# Local editor state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Public documentation
+!README.md
+!README.en.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+!SECURITY.md
+!docs/**/*.md
+!examples/**/README.md
+!.github/**/*.md

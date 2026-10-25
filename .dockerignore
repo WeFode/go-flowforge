@@ -1,0 +1,16 @@
+.git
+.env
+config.local.yaml
+web/node_modules
+web/dist
+bin
+test-results
+*.exe
+dist
+node_modules
+*.log
+*.dump
+*.zip
+*.tar.gz
+.env.*
+!.env.example

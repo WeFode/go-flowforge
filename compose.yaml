@@ -1,0 +1,56 @@
+name: flowforge
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: flowforge
+      POSTGRES_USER: flowforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/dev.ps1 or configure .env}
+    ports: ["127.0.0.1:${POSTGRES_PORT:-55432}:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowforge -d flowforge"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    profiles: [redis]
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:${REDIS_PORT:-56379}:6379"]
+    volumes: ["redis-data:/data"]
+    restart: unless-stopped
+  app:
+    build:
+      context: .
+      target: app
+    profiles: [app]
+    environment:
+      FLOWFORGE_DATABASE_URL: postgres://flowforge:${POSTGRES_PASSWORD}@postgres:5432/flowforge?sslmode=disable
+      FLOWFORGE_API_TOKEN: ${FLOWFORGE_API_TOKEN:?Run scripts/dev.ps1 or configure .env}
+      FLOWFORGE_PUBLIC_URL: ${FLOWFORGE_PUBLIC_URL:-http://localhost:8088}
+      FLOWFORGE_DEMO: ${FLOWFORGE_DEMO:-false}
+      FLOWFORGE_HTTP_ALLOW_PRIVATE: ${FLOWFORGE_HTTP_ALLOW_PRIVATE:-false}
+      FLOWFORGE_HTTP_ALLOWED_HOSTS: ${FLOWFORGE_HTTP_ALLOWED_HOSTS:-}
+      FLOWFORGE_WORKERS: ${FLOWFORGE_WORKERS:-8}
+      FLOWFORGE_POLL_MS: ${FLOWFORGE_POLL_MS:-500}
+      FLOWFORGE_LEASE_SECONDS: ${FLOWFORGE_LEASE_SECONDS:-30}
+      FLOWFORGE_DB_CONNECTIONS: ${FLOWFORGE_DB_CONNECTIONS:-24}
+      FLOWFORGE_REDIS_URL: ${FLOWFORGE_REDIS_URL:-}
+    ports: ["127.0.0.1:${APP_PORT:-8088}:8088"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8088/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+volumes:
+  postgres-data:
+  redis-data:
