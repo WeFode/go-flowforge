@@ -31,7 +31,7 @@ Delivery is at least once. Receivers must deduplicate external side effects usin
 
 ## Development
 
-Go 1.25+, Node 22+ and PostgreSQL 17 are required for native development. Windows users can run `scripts/dev.ps1`; Docker deployment does not require a local Go toolchain. See [deployment](docs/deployment.md) and [testing](docs/testing.md).
+Go 1.25+, Node 22+ and PostgreSQL 17 are required for native development. Windows users can run `scripts/dev.ps1 -Hmr` for Vite hot reload with the API on 8088, or `scripts/dev.ps1` to build the console and serve the bundle from Go. Docker deployment does not require a local Go toolchain. See [deployment](docs/deployment.md) and [testing](docs/testing.md).
 
 This release targets one trusted workspace per deployment. Multi-tenant authorization, RBAC, SSO, billing, dynamic subworkflows and arbitrary scripts are outside its current scope. Redis is optional infrastructure and is not used by the scheduler.
 

@@ -1,3 +1,4 @@
+export type Section = "workflows" | "runs" | "integrations";
 export type Step = {
   id: string;
   name: string;
@@ -73,7 +74,7 @@ export const typeNames: Record<string, string> = {
   http: "HTTP 请求",
   transform: "数据转换",
   delay: "延时等待",
-  callback: "HTTP 请求",
+  callback: "异步回调",
 };
 export const modeOf = (step: Step): "sync" | "async" =>
   step.execution_mode ||

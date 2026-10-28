@@ -1,30 +1,42 @@
 # FlowForge
 
-面向企业系统与 AI 应用的轻量工作流调度平台。
+**把复杂流程，变成可复用、可追踪、可重跑的确定性执行。**
 
-通过可视化表单编排 HTTP 服务、智能体和后台任务，组合串行、并行与异步执行。使用 PostgreSQL 保存队列、步骤结果和执行历史，支持失败重试、时间窗口与定时触发。
+FlowForge 面向企业系统与 AI 应用：用可视化画布编排 HTTP 服务、智能体和后台任务，组合串行、并行与异步等待；用 PostgreSQL 保存队列、租约、步骤输出和定义快照。业务逻辑留在服务里，执行语义交给引擎。
 
-[English](README.en.md) · [快速体验](#快速体验) · [工厂 ERP 示例](docs/erp-demo.md) · [异步任务接入](docs/async-workers.md) · [API](internal/httpapi/openapi.yaml)
+[快速体验](#快速体验) · [本地开发](#本地开发hmr) · [工厂 ERP 示例](docs/erp-demo.md) · [异步接入](docs/async-workers.md) · [API](internal/httpapi/openapi.yaml) · [英文版](README.en.md)
 
 ![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-## 可以用来做什么
+![工厂 ERP · 订单到排产：八个步骤、并行智能体和异步等待](docs/screenshots/erp-workflow.png)
 
-| 场景 | 一条工作流可以完成的事情 |
-| --- | --- |
-| 工厂 ERP | 订单进入后并行分析库存、质检和产能；异步生成采购建议；汇合生成排产单并回写 ERP |
-| 多智能体应用 | 并行检索与分析，等待长耗时智能体上报，再汇总结果、触发后续服务 |
-| 数据与文档处理 | 文件地址入队，异步抽取与审核，失败重试，输出结果交给下游系统 |
-| 定时后台任务 | 在指定时区和时间窗口运行同步、报表或批处理，保留每一步的状态和输出 |
+> 一条真实的八步骤链路：库存、质检、产能并行分析，采购与产能异步上报，汇合排产并回写 ERP 工单。画布上直接标注依赖关系、同步/异步模式与运行状态。
 
-### 工厂 ERP：订单到排产
+## 为什么是 FlowForge
+
+- **执行语义可验证**：定义保存即生成版本快照；运行中的实例按快照执行，可原样重跑。
+- **异步有始有终**：2xx 只代表接收，每次尝试有独立回调令牌、租约和超时；完成上报才推进依赖。
+- **失败是设计的一部分**：指数退避、失败传播、时间窗口和并发上限由引擎统一处理，不散落在业务代码里。
+- **业务边界清晰**：输入输出都是 JSON；引擎不判断订单、案件或客户字段，领域事务留在服务内部。
+
+## 控制台
+
+同一套控制台在工厂 ERP 场景中的真实截图：深色画布、分组检查器、实时状态与执行历史。
+
+![控制台总览：工作流、执行指标与状态分布](docs/screenshots/console-workflows.png)
+
+![执行历史：批量触发、混合状态与步骤进度](docs/screenshots/console-runs.png)
+
+![异步等待：产能评估与采购建议等待外部上报](docs/screenshots/erp-async.png)
+
+![结果与时间线：排产结果、ERP 工单、步骤输出和完整事件流](docs/screenshots/erp-result.png)
+
+## 工厂 ERP：订单到排产
 
 八个步骤同时覆盖同步、异步、串行、并行、失败重试和结果汇合。演示服务返回确定性数据，不需要模型密钥或真实 ERP 账号。
-
-![工厂 ERP 流程编排：每个节点标注同步或异步](docs/screenshots/erp-workflow.png)
 
 ```mermaid
 flowchart LR
@@ -42,9 +54,7 @@ flowchart LR
 
 异步任务返回 `202` 后，工作流保留等待状态；开发者在业务内部执行完成后调用统一上报方法，依赖它的步骤才会继续。
 
-![执行中的同步与异步步骤](docs/screenshots/erp-async.png)
-
-![排产结果、ERP 工单与完整执行时间线](docs/screenshots/erp-result.png)
+默认示例让库存服务第一次返回 `503`，随后自动重试成功。将输入中的 `scenario.notification_failure` 改成 `true`，可以观察非关键通知失败而主流程仍成功；将 `scenario.quality_reject` 改成 `true`，可以观察关键步骤失败后停止流程。
 
 ## 快速体验
 
@@ -68,8 +78,6 @@ Windows 一条命令：
 
 打开 **http://localhost:8088**，使用本地 `.env` 中的 `FLOWFORGE_API_TOKEN` 登录。选择 **工厂 ERP · 订单到排产**，点击“运行”。输入框已填好订单数据，约十几秒后可查看排产、采购建议和 ERP 工单结果。
 
-默认示例让库存服务第一次返回 `503`，随后自动重试成功。将输入中的 `scenario.notification_failure` 改成 `true`，可以观察非关键通知失败而主流程仍成功；将 `scenario.quality_reject` 改成 `true`，可以观察关键步骤失败后停止流程。
-
 ### 标准部署
 
 ```bash
@@ -84,6 +92,37 @@ docker compose -f compose.yaml -f compose.demo.yaml --profile app down
 ```
 
 此命令保留 PostgreSQL 数据卷。配置详情见 [部署指南](docs/deployment.md)。
+
+## 本地开发（HMR）
+
+改前端时不要走“构建后由 Go 托管”的预览模式，直接使用 Vite 开发服务器：
+
+```powershell
+.\scripts\dev.ps1 -Hmr
+```
+
+这条命令会：
+
+1. 启动 PostgreSQL（Docker）；
+2. 在新窗口启动 Go API，监听 `8088`，输出后端日志；
+3. 在当前窗口启动 Vite，监听 `5178`，支持热更新；
+4. 自动把 `/api` 和 `/healthz` 代理到 `8088`。
+
+打开 **http://127.0.0.1:5178**，使用 `.env` 中的 `FLOWFORGE_API_TOKEN` 登录。修改 `web/src` 中的任意文件会立即热更新。
+
+也可以分成两个终端，分别看日志：
+
+```powershell
+# 终端 1：PostgreSQL + Go API
+.\scripts\dev-api.ps1
+
+# 终端 2：Vite 控制台
+.\scripts\dev-web.ps1
+```
+
+`.\scripts\dev.ps1`（不加 `-Hmr`）会先执行 `npm ci` 和 `npm run build`，再由 Go 直接托管 `web/dist`，适合接近生产的本地验收；日常改前端请使用上面的 HMR 模式。
+
+其他系统可参考 [部署指南的“原生开发”](docs/deployment.md#原生开发)。原生联调 ERP 示例时，额外启动 `go run ./examples/erp/worker`，设置 `FLOWFORGE_DEMO_AGENT_URL=http://127.0.0.1:8090` 并放行回环地址；新数据库会按该地址生成示例，已有数据库可在流程设置中把请求地址改为本地智能体。详细步骤见 [工厂 ERP 示例](docs/erp-demo.md)。
 
 ## 核心能力
 
@@ -137,6 +176,19 @@ err = task.Reporter.Succeed(ctx, result)
 ```
 
 统一 HTTP 接口为 `POST /api/v1/callbacks/{token}`，支持 `succeeded`、`failed`，每次尝试有独立限时令牌。完整 SDK 用法、后台队列接入和幂等规则见 [异步开发指南](docs/async-workers.md)。
+
+## 项目结构
+
+| 路径 | 职责 |
+| --- | --- |
+| `cmd/flowforge` | 进程入口、配置加载、迁移与演示数据 |
+| `internal/engine` | DAG 调度、HTTP/转换/延时处理器、租约与重试 |
+| `internal/store` | PostgreSQL 队列、定义快照、事件与迁移 |
+| `internal/httpapi` | REST API、鉴权、静态控制台与 OpenAPI |
+| `pkg/worker` | 异步任务上报 SDK |
+| `web` | React 19 + TailwindCSS 4 + 定制组件层 |
+| `examples/erp` | 八步骤 ERP 演示与确定性智能体 |
+| `scripts` | 初始化、开发、演示、验证与发布工具 |
 
 ## 文档
 

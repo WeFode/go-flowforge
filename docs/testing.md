@@ -30,6 +30,14 @@ Windows 的 `scripts/test.ps1` 会启动本地 PostgreSQL、设置测试地址�
 
 ## 前端与发布工具
 
+本地联调使用 Vite 热更新（API 在 8088，控制台在 5178，`/api` 自动代理）：
+
+```powershell
+.\scripts\dev.ps1 -Hmr
+```
+
+生产构建与发布工具：
+
 ```bash
 npm --prefix web ci
 npm --prefix web run build

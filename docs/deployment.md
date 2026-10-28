@@ -63,7 +63,7 @@ services:
 
 要求 Go 1.25+、Node 22+、Docker PostgreSQL。
 
-Windows：`scripts/dev.ps1` 自动生成凭据、启动数据库、构建前端并运行后端；启动原生模式前会停止同项目的应用容器。
+Windows：`scripts/dev.ps1 -Hmr` 会启动数据库，在新窗口运行 Go API（8088），在当前窗口运行 Vite（5178，HMR，`/api` 代理到 8088）；也可以分别运行 `scripts/dev-api.ps1` 和 `scripts/dev-web.ps1`。不加 `-Hmr` 时，`scripts/dev.ps1` 会构建前端并让 Go 托管 `web/dist`，适合本地验收。启动原生模式前会停止同项目的应用容器。
 
 其他系统可先启动数据库，再设置环境变量：
 

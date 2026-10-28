@@ -24,6 +24,7 @@
     },
     {
       "id": "quality", "name": "质检规则智能体", "type": "http", "execution_mode": "sync", "depends_on": ["order"], "timeout_seconds": 10,
+      "retry": { "max_attempts": 2, "initial_seconds": 1, "max_seconds": 3 },
       "config": { "url": "http://erp-agents:8090/agents/quality", "method": "POST", "body": { "order": "{{steps.order.output}}" } }
     },
     {
@@ -38,10 +39,12 @@
     },
     {
       "id": "plan", "name": "汇合生成排产单", "type": "http", "execution_mode": "sync", "depends_on": ["inventory", "quality", "capacity", "procurement"], "timeout_seconds": 10,
+      "retry": { "max_attempts": 2, "initial_seconds": 1, "max_seconds": 3 },
       "config": { "url": "http://erp-agents:8090/agents/plan", "method": "POST", "body": { "order": "{{steps.order.output}}", "inventory": "{{steps.inventory.output.body}}", "quality": "{{steps.quality.output.body}}", "capacity": "{{steps.capacity.output}}", "procurement": "{{steps.procurement.output}}" } }
     },
     {
       "id": "erp_writeback", "name": "回写 ERP 工单", "type": "http", "execution_mode": "sync", "depends_on": ["plan"], "timeout_seconds": 10,
+      "retry": { "max_attempts": 2, "initial_seconds": 1, "max_seconds": 3 },
       "config": { "url": "http://erp-agents:8090/agents/erp", "method": "POST", "body": { "order": "{{steps.order.output}}", "plan": "{{steps.plan.output.body}}" } }
     },
     {
